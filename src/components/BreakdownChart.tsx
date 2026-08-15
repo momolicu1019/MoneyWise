@@ -97,6 +97,7 @@ export function BreakdownChart({ selected, breakdown }: Props) {
         <View style={styles.meta}>
           <Text style={styles.metaText}>
             Salary: <Text style={styles.metaStrong}>{money(breakdown.income)}</Text>
+            {breakdown.payCount > 1 ? ` · ${breakdown.payCount} pay periods in this range` : ''}
             {selected.length === 1 ? ` · ${salaryFreqLabel[selected[0].freq]}` : ' · combined'}
           </Text>
         </View>

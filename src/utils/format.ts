@@ -31,6 +31,19 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
 
+export function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+export function defaultSecondPayDate(freq: SalaryFrequency, firstIso: string): string {
+  const first = parseISODate(firstIso);
+  if (freq === 'biweekly') return toISODate(addDays(first, 14));
+  if (freq === 'semimonthly') return toISODate(addDays(first, 15));
+  return firstIso;
+}
+
 export const salaryFreqLabel: Record<SalaryFrequency, string> = {
   monthly: 'Monthly',
   biweekly: 'Every 2 weeks / Biweekly',

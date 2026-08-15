@@ -10,6 +10,7 @@ export type Salary = {
   savings: number;
   color: string;
   payDate: string;
+  secondPayDate?: string;
   secondPayDay?: string;
 };
 

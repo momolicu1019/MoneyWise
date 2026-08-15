@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useApp } from '../context/AppContext';
 import { computeBreakdown } from '../utils/recurrence';
-import { toISODate } from '../utils/format';
+import { daysInMonth, formatDisplayDate, parseISODate, toISODate } from '../utils/format';
 import { Header } from '../components/Header';
 import { Card } from '../components/Card';
 import { SalaryCard } from '../components/SalaryCard';
@@ -17,6 +18,15 @@ import { SelectField } from '../components/SelectField';
 import { PrimaryButton } from '../components/Buttons';
 import type { Expense, Salary } from '../types';
 import { colors } from '../theme';
+
+function monthRange(date: Date) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  return {
+    start: toISODate(new Date(year, month, 1)),
+    end: toISODate(new Date(year, month, daysInMonth(year, month))),
+  };
+}
 
 export function HomeScreen() {
   const {
@@ -37,14 +47,23 @@ export function HomeScreen() {
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [rangeStart, setRangeStart] = useState(() => monthRange(viewDate).start);
+  const [rangeEnd, setRangeEnd] = useState(() => monthRange(viewDate).end);
+  const [picking, setPicking] = useState<'start' | 'end' | null>(null);
+
+  useEffect(() => {
+    const next = monthRange(viewDate);
+    setRangeStart(next.start);
+    setRangeEnd(next.end);
+  }, [viewDate]);
 
   const selectedSalaries = useMemo(
     () => (selectedSalaryId === 'all' ? salaries : salaries.filter((salary) => salary.id === selectedSalaryId)),
     [salaries, selectedSalaryId],
   );
   const breakdown = useMemo(
-    () => computeBreakdown(selectedSalaries, expenses, viewDate.getFullYear(), viewDate.getMonth()),
-    [expenses, selectedSalaries, viewDate],
+    () => computeBreakdown(selectedSalaries, expenses, rangeStart, rangeEnd),
+    [expenses, rangeEnd, rangeStart, selectedSalaries],
   );
   const filterLabel =
     selectedSalaryId === 'all'
@@ -62,6 +81,19 @@ export function HomeScreen() {
     }
     setEditingExpense(null);
     setExpenseModalOpen(true);
+  };
+
+  const onRangeDate = (which: 'start' | 'end') => (event: DateTimePickerEvent, selected?: Date) => {
+    if (Platform.OS === 'android') setPicking(null);
+    if (event.type === 'dismissed' || !selected) return;
+    const next = toISODate(selected);
+    if (which === 'start') {
+      setRangeStart(next);
+      if (next > rangeEnd) setRangeEnd(next);
+    } else {
+      setRangeEnd(next);
+      if (next < rangeStart) setRangeStart(next);
+    }
   };
 
   return (
@@ -93,7 +125,7 @@ export function HomeScreen() {
 
         <Card
           title="🗓️ Expense Calendar"
-          subtitle="Expenses are color-coded according to their associated salary."
+          subtitle="Paydays and expenses use each salary's color."
         >
           <View style={styles.calendarActions}>
             <View style={{ flex: 1 }}>
@@ -116,8 +148,24 @@ export function HomeScreen() {
 
         <Card
           title="🥧 Salary Breakdown"
-          subtitle="Breakdown follows the salary selected in the calendar filter."
+          subtitle="Choose a date range. Remaining is salary minus expenses and savings in that range."
         >
+          <View style={styles.rangeRow}>
+            <View style={{ flex: 1 }}>
+              <SelectField
+                label="From"
+                value={formatDisplayDate(rangeStart)}
+                onPress={() => setPicking('start')}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <SelectField
+                label="To"
+                value={formatDisplayDate(rangeEnd)}
+                onPress={() => setPicking('end')}
+              />
+            </View>
+          </View>
           <BreakdownChart selected={selectedSalaries} breakdown={breakdown} />
         </Card>
 
@@ -160,6 +208,14 @@ export function HomeScreen() {
         onSelect={setSelectedSalaryId}
         onClose={() => setFilterOpen(false)}
       />
+      {picking ? (
+        <DateTimePicker
+          value={parseISODate(picking === 'start' ? rangeStart : rangeEnd)}
+          mode="date"
+          display="default"
+          onChange={onRangeDate(picking)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -184,5 +240,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     marginBottom: 10,
+  },
+  rangeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
   },
 });

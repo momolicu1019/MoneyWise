@@ -26,7 +26,7 @@ export function SavingsProgress({ savings, income }: Props) {
       </View>
       <Text style={styles.note}>
         {income
-          ? `${pct.toFixed(0)}% of the configured salary amount is allocated to savings.`
+          ? `${pct.toFixed(0)}% of salary in this range is allocated to savings.`
           : 'Add a salary to track savings.'}
       </Text>
     </View>

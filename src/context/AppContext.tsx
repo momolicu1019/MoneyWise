@@ -9,23 +9,18 @@ import {
   type ReactNode,
 } from 'react';
 import { Alert } from 'react-native';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
 import type { Expense, GoogleUser, Salary, SalaryFilterId } from '../types';
 import {
-  clearAuthSession,
-  fetchGoogleUser,
-  getGoogleClientIds,
+  configureGoogleSignIn,
   getValidAccessToken,
-  GOOGLE_SCOPES,
+  isGoogleCancelError,
   isGoogleConfigured,
   loadStoredUser,
-  saveAuthSession,
+  signInWithGoogleNative,
+  signOutFromGoogle,
 } from '../services/googleAuth';
 import { pullFromDrive, pushToDrive } from '../services/googleDrive';
 import { loadLocalPayload, makePayload, saveLocalPayload } from '../services/storage';
-
-WebBrowser.maybeCompleteAuthSession();
 
 type AppContextValue = {
   ready: boolean;
@@ -49,8 +44,6 @@ type AppContextValue = {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-const PLACEHOLDER_CLIENT_ID = 'pending.apps.googleusercontent.com';
-
 export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<GoogleUser | null>(null);
@@ -61,20 +54,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedSalaryId, setSelectedSalaryId] = useState<SalaryFilterId>('all');
   const [viewDate, setViewDate] = useState(() => new Date());
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clientIds = getGoogleClientIds();
   const googleConfigured = isGoogleConfigured();
-  const webClientId = clientIds.webClientId || PLACEHOLDER_CLIENT_ID;
-  const androidClientId = clientIds.androidClientId || clientIds.webClientId || PLACEHOLDER_CLIENT_ID;
-  const iosClientId = clientIds.iosClientId || clientIds.webClientId || PLACEHOLDER_CLIENT_ID;
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId,
-    androidClientId,
-    iosClientId,
-    scopes: GOOGLE_SCOPES,
-    extraParams: { access_type: 'offline', prompt: 'consent' },
-  });
 
   const persistAndSync = useCallback(
     (nextSalaries: Salary[], nextExpenses: Expense[]) => {
@@ -123,6 +103,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    configureGoogleSignIn();
     void (async () => {
       const local = await loadLocalPayload();
       if (local) {
@@ -139,44 +120,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     })();
   }, [hydrateFromCloud]);
 
-  useEffect(() => {
-    if (response?.type !== 'success') return;
-    const accessToken = response.authentication?.accessToken;
-    if (!accessToken) return;
-    void (async () => {
-      try {
-        const profile = await fetchGoogleUser(accessToken);
-        await saveAuthSession({
-          accessToken,
-          refreshToken: response.authentication?.refreshToken,
-          expiresIn: response.authentication?.expiresIn,
-          user: profile,
-        });
-        setUser(profile);
-        await hydrateFromCloud();
-      } catch (error) {
-        Alert.alert('Google sign-in failed', error instanceof Error ? error.message : 'Unknown error');
-      }
-    })();
-  }, [hydrateFromCloud, response]);
-
   const signInWithGoogle = useCallback(async () => {
     if (!googleConfigured) {
       Alert.alert(
         'Google not configured',
-        'Add your Google OAuth client IDs to .env (see README), then restart Expo.',
+        'Add your Google OAuth Web and Android client IDs, then create a new EAS build.',
       );
       return;
     }
-    if (!request) {
-      Alert.alert('Google sign-in', 'Google sign-in is still loading. Try again in a moment.');
-      return;
+    try {
+      const profile = await signInWithGoogleNative();
+      setUser(profile);
+      await hydrateFromCloud();
+    } catch (error) {
+      if (isGoogleCancelError(error)) return;
+      Alert.alert('Google sign-in failed', error instanceof Error ? error.message : 'Unknown error');
     }
-    await promptAsync();
-  }, [googleConfigured, promptAsync, request]);
+  }, [googleConfigured, hydrateFromCloud]);
 
   const signOut = useCallback(async () => {
-    await clearAuthSession();
+    await signOutFromGoogle();
     setUser(null);
   }, []);
 

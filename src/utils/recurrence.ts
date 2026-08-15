@@ -1,5 +1,5 @@
 import type { Expense, Salary } from '../types';
-import { daysInMonth, parseISODate, toISODate } from './format';
+import { addDays, daysInMonth, parseISODate, toISODate } from './format';
 
 const MS_PER_DAY = 86400000;
 
@@ -45,30 +45,58 @@ export function monthExpenseTotal(
   return total;
 }
 
-export function payOnDay(salary: Salary, year: number, month: number, day: number): number {
+export function resolveSecondPayDate(salary: Salary): Date | null {
+  const raw = salary.secondPayDate || salary.secondPayDay;
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return parseISODate(raw);
+  const dayNum = parseInt(raw, 10);
+  if (!dayNum) return null;
+  const first = parseISODate(salary.payDate);
+  return new Date(first.getFullYear(), first.getMonth(), dayNum);
+}
+
+export function salaryPaysOnDay(salary: Salary, year: number, month: number, day: number): boolean {
   const date = new Date(year, month, day);
   const start = parseISODate(salary.payDate || toISODate(new Date(year, month, 1)));
-  if (date < start) return 0;
+  if (date < start) return false;
 
   const diff = Math.floor((date.getTime() - start.getTime()) / MS_PER_DAY);
   const lastDay = daysInMonth(year, month);
   const startDay = start.getDate();
 
   if (salary.freq === 'monthly') {
-    return day === Math.min(startDay, lastDay) ? salary.amount : 0;
+    return day === Math.min(startDay, lastDay);
   }
   if (salary.freq === 'weekly') {
-    return diff % 7 === 0 ? salary.amount : 0;
+    return diff % 7 === 0;
   }
   if (salary.freq === 'biweekly') {
-    return diff % 14 === 0 ? salary.amount : 0;
+    return diff % 14 === 0;
   }
   if (salary.freq === 'semimonthly') {
     const firstDay = Math.min(startDay, lastDay);
-    const secondDay = Math.min(parseInt(salary.secondPayDay || '30', 10), lastDay);
-    return day === firstDay || day === secondDay ? salary.amount : 0;
+    const second = resolveSecondPayDate(salary);
+    const secondDay = Math.min(second ? second.getDate() : startDay + 15, lastDay);
+    return day === firstDay || day === secondDay;
   }
-  return 0;
+  return false;
+}
+
+export function payOnDay(salary: Salary, year: number, month: number, day: number): number {
+  return salaryPaysOnDay(salary, year, month, day) ? salary.amount : 0;
+}
+
+export function payCountInMonth(salary: Salary, year: number, month: number): number {
+  const days = daysInMonth(year, month);
+  let count = 0;
+  for (let day = 1; day <= days; day += 1) {
+    if (salaryPaysOnDay(salary, year, month, day)) count += 1;
+  }
+  return count;
+}
+
+export function monthPayTotal(salary: Salary, year: number, month: number): number {
+  return payCountInMonth(salary, year, month) * salary.amount;
 }
 
 export type Breakdown = {
@@ -78,30 +106,69 @@ export type Breakdown = {
   remaining: number;
   expensePct: number;
   savingPct: number;
+  payCount: number;
+  startIso: string;
+  endIso: string;
 };
 
 export function computeBreakdown(
   selected: Salary[],
   expenses: Expense[],
-  year: number,
-  month: number,
+  startIso: string,
+  endIso: string,
 ): Breakdown {
-  const income = selected.reduce((sum, salary) => sum + salary.amount, 0);
-  const savings = selected.reduce((sum, salary) => sum + salary.savings, 0);
-  const expenseTotal = selected.reduce(
-    (sum, salary) => sum + monthExpenseTotal(expenses, salary.id, year, month),
-    0,
-  );
+  const start = parseISODate(startIso);
+  const end = parseISODate(endIso);
+  const from = start <= end ? start : end;
+  const to = start <= end ? end : start;
+
+  let payCount = 0;
+  let income = 0;
+  let savings = 0;
+  let expenseTotal = 0;
+
+  const cursor = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const last = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  while (cursor <= last) {
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth();
+    const day = cursor.getDate();
+    selected.forEach((salary) => {
+      if (salaryPaysOnDay(salary, year, month, day)) {
+        payCount += 1;
+        income += salary.amount;
+        savings += salary.savings;
+      }
+      expenseTotal += expensesOnDay(expenses, salary.id, year, month, day).reduce(
+        (sum, expense) => sum + expense.amount,
+        0,
+      );
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
   const remaining = income - expenseTotal - savings;
   const total = Math.max(1, income);
-  const expensePct = Math.min(100, (expenseTotal / total) * 100);
-  const savingPct = Math.min(100, (savings / total) * 100);
   return {
     income,
     expenses: expenseTotal,
     savings,
     remaining,
-    expensePct,
-    savingPct,
+    expensePct: Math.min(100, (expenseTotal / total) * 100),
+    savingPct: Math.min(100, (savings / total) * 100),
+    payCount,
+    startIso: toISODate(from),
+    endIso: toISODate(to),
   };
+}
+
+export function adjustedSecondPayDate(freq: Salary['freq'], firstIso: string, secondIso?: string): string | undefined {
+  if (freq !== 'biweekly' && freq !== 'semimonthly') return undefined;
+  const first = parseISODate(firstIso);
+  if (freq === 'biweekly') return toISODate(addDays(first, 14));
+  if (secondIso) {
+    const second = parseISODate(secondIso);
+    return second <= first ? toISODate(addDays(first, 15)) : secondIso;
+  }
+  return toISODate(addDays(first, 15));
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Expense, Salary, SalaryFilterId } from '../types';
 import { daysInMonth, monthTitle, toISODate } from '../utils/format';
-import { expenseOccursOn } from '../utils/recurrence';
+import { expenseOccursOn, salaryPaysOnDay } from '../utils/recurrence';
 import { SoftButton } from './Buttons';
 import { colors } from '../theme';
 
@@ -37,8 +37,8 @@ export function ExpenseCalendar({
   const cells = useMemo(() => {
     const first = new Date(year, month, 1).getDay();
     const days = daysInMonth(year, month);
-    const items: Array<{ day?: number; iso?: string; items: Expense[] }> = [];
-    for (let i = 0; i < first; i += 1) items.push({ items: [] });
+    const items: Array<{ day?: number; iso?: string; items: Expense[]; paydays: Salary[] }> = [];
+    for (let i = 0; i < first; i += 1) items.push({ items: [], paydays: [] });
     for (let day = 1; day <= days; day += 1) {
       const iso = toISODate(new Date(year, month, day));
       const dayItems = expenses.filter(
@@ -46,11 +46,23 @@ export function ExpenseCalendar({
           (selectedSalaryId === 'all' || expense.salaryId === selectedSalaryId) &&
           expenseOccursOn(expense, year, month, day),
       );
-      items.push({ day, iso, items: dayItems });
+      const paydays = salaries.filter(
+        (salary) =>
+          (selectedSalaryId === 'all' || salary.id === selectedSalaryId) &&
+          salaryPaysOnDay(salary, year, month, day),
+      );
+      items.push({ day, iso, items: dayItems, paydays });
     }
     return items;
-  }, [expenses, month, selectedSalaryId, year]);
+  }, [expenses, month, salaries, selectedSalaryId, year]);
 
+  const overflowPaydays = overflowDay
+    ? salaries.filter(
+        (salary) =>
+          (selectedSalaryId === 'all' || salary.id === selectedSalaryId) &&
+          salaryPaysOnDay(salary, year, month, overflowDay),
+      )
+    : [];
   const overflowItems = overflowDay
     ? expenses.filter(
         (expense) =>
@@ -62,7 +74,7 @@ export function ExpenseCalendar({
   const weeks: typeof cells[] = [];
   for (let i = 0; i < cells.length; i += 7) {
     const week = cells.slice(i, i + 7);
-    while (week.length < 7) week.push({ items: [] });
+    while (week.length < 7) week.push({ items: [], paydays: [] });
     weeks.push(week);
   }
 
@@ -84,26 +96,62 @@ export function ExpenseCalendar({
         {weeks.map((week, weekIndex) => (
           <View key={`w-${weekIndex}`} style={styles.row}>
             {week.map((cell, index) => {
-              const visible = cell.items.slice(0, 2);
-              const extra = cell.items.length - visible.length;
+              const marks = [
+                ...(cell.paydays || []).map((salary) => ({
+                  key: `p-${salary.id}`,
+                  label: salary.name,
+                  color: salary.color,
+                  expense: null as Expense | null,
+                })),
+                ...cell.items.map((expense) => ({
+                  key: expense.id,
+                  label: expense.name,
+                  color: salaryById[expense.salaryId]?.color || '#64748b',
+                  expense,
+                })),
+              ];
+              const visible = marks.slice(0, 2);
+              const extra = marks.length - visible.length;
               const isToday = cell.iso === today;
               return (
                 <View
                   key={`${cell.day || 'e'}-${weekIndex}-${index}`}
-                  style={[styles.day, !cell.day && styles.empty, isToday && styles.today]}
+                  style={[
+                    styles.day,
+                    !cell.day && styles.empty,
+                    isToday && styles.today,
+                    cell.paydays?.length ? { borderLeftWidth: 3, borderLeftColor: cell.paydays[0].color } : null,
+                  ]}
                 >
-                  {cell.day ? <Text style={styles.dayNum}>{cell.day}</Text> : null}
-                  {visible.map((expense) => (
-                    <Pressable
-                      key={expense.id}
-                      onPress={() => onPressExpense(expense)}
-                      style={[styles.pill, { backgroundColor: salaryById[expense.salaryId]?.color || '#64748b' }]}
-                    >
-                      <Text numberOfLines={1} style={styles.pillText}>
-                        {expense.name}
-                      </Text>
-                    </Pressable>
-                  ))}
+                  {cell.day ? (
+                    <View style={styles.dayHead}>
+                      <Text style={styles.dayNum}>{cell.day}</Text>
+                      <View style={styles.dots}>
+                        {(cell.paydays || []).map((salary) => (
+                          <View key={salary.id} style={[styles.payDot, { backgroundColor: salary.color }]} />
+                        ))}
+                      </View>
+                    </View>
+                  ) : null}
+                  {visible.map((mark) =>
+                    mark.expense ? (
+                      <Pressable
+                        key={mark.key}
+                        onPress={() => onPressExpense(mark.expense!)}
+                        style={[styles.pill, { backgroundColor: mark.color }]}
+                      >
+                        <Text numberOfLines={1} style={styles.pillText}>
+                          {mark.label}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <View key={mark.key} style={[styles.pill, { backgroundColor: mark.color }]}>
+                        <Text numberOfLines={1} style={styles.pillText}>
+                          {mark.label}
+                        </Text>
+                      </View>
+                    ),
+                  )}
                   {extra > 0 ? (
                     <Pressable onPress={() => setOverflowDay(cell.day || null)}>
                       <Text style={styles.more}>+{extra} more</Text>
@@ -116,7 +164,7 @@ export function ExpenseCalendar({
         ))}
       </View>
       <Text style={styles.note}>
-        Click an expense title to edit or delete it. Repeating expenses appear on future matching dates.
+        Payday dates are marked in the salary color. Tap an expense to edit or delete it.
       </Text>
 
       <Modal visible={overflowDay !== null} transparent animationType="fade" onRequestClose={() => setOverflowDay(null)}>
@@ -125,6 +173,11 @@ export function ExpenseCalendar({
             <Text style={styles.sheetTitle}>
               {overflowDay} {monthTitle(viewDate)}
             </Text>
+            {overflowPaydays.map((salary) => (
+              <View key={salary.id} style={[styles.sheetRow, { backgroundColor: salary.color }]}>
+                <Text style={styles.sheetRowText}>{salary.name} payday</Text>
+              </View>
+            ))}
             {overflowItems.map((expense) => (
               <Pressable
                 key={expense.id}
@@ -193,11 +246,25 @@ const styles = StyleSheet.create({
   today: {
     backgroundColor: colors.today,
   },
+  dayHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
   dayNum: {
     fontSize: 10,
     fontWeight: '900',
     color: '#64748b',
-    marginBottom: 2,
+  },
+  dots: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  payDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   pill: {
     borderRadius: 6,

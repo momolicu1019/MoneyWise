@@ -13,7 +13,8 @@ import {
   View,
 } from 'react-native';
 import type { Salary, SalaryFrequency } from '../types';
-import { salaryFreqLabel, toISODate } from '../utils/format';
+import { defaultSecondPayDate, parseISODate, salaryFreqLabel, toISODate } from '../utils/format';
+import { adjustedSecondPayDate } from '../utils/recurrence';
 import { colors, salaryPalette } from '../theme';
 import { ColorPicker } from './ColorPicker';
 import { OptionsModal } from './OptionsModal';
@@ -35,9 +36,16 @@ type Props = {
 
 function helperFor(freq: SalaryFrequency): string {
   if (freq === 'monthly') return 'The salary will recur on this day each month.';
-  if (freq === 'biweekly') return 'The salary will be received every 14 days from this date.';
+  if (freq === 'biweekly') return 'The second payday is 14 days later, then every 2 weeks.';
   if (freq === 'weekly') return 'The salary will be received every 7 days from this date.';
-  return 'Choose the two dates when the salary is received each month.';
+  return 'Both dates repeat each month. Upcoming paydays are marked on the calendar.';
+}
+
+function existingSecondDate(salary?: Salary | null): string {
+  if (salary?.secondPayDate) return salary.secondPayDate;
+  if (salary?.secondPayDay && /^\d{4}-\d{2}-\d{2}$/.test(salary.secondPayDay)) return salary.secondPayDay;
+  if (salary?.payDate && salary.freq) return defaultSecondPayDate(salary.freq, salary.payDate);
+  return defaultSecondPayDate('semimonthly', toISODate(new Date()));
 }
 
 export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: Props) {
@@ -45,33 +53,56 @@ export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: P
   const [amount, setAmount] = useState('');
   const [freq, setFreq] = useState<SalaryFrequency>('monthly');
   const [payDate, setPayDate] = useState(toISODate(new Date()));
-  const [secondPayDay, setSecondPayDay] = useState('30');
+  const [secondPayDate, setSecondPayDate] = useState(defaultSecondPayDate('semimonthly', toISODate(new Date())));
   const [savings, setSavings] = useState('');
   const [color, setColor] = useState(salaryPalette[0]);
   const [showFreq, setShowFreq] = useState(false);
   const [showDate, setShowDate] = useState(false);
-  const [showSecond, setShowSecond] = useState(false);
+  const [showSecondDate, setShowSecondDate] = useState(false);
+
+  const needsSecondDate = freq === 'biweekly' || freq === 'semimonthly';
 
   useEffect(() => {
     if (!visible) return;
+    const first =
+      salary?.payDate || toISODate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+    const nextFreq = salary?.freq || 'monthly';
     setName(salary?.name || '');
     setAmount(salary?.amount ? String(salary.amount) : '');
-    setFreq(salary?.freq || 'monthly');
-    setPayDate(salary?.payDate || toISODate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
-    setSecondPayDay(salary?.secondPayDay || '30');
+    setFreq(nextFreq);
+    setPayDate(first);
+    setSecondPayDate(existingSecondDate(salary) || defaultSecondPayDate(nextFreq, first));
     setSavings(salary?.savings ? String(salary.savings) : '');
     setColor(salary?.color || salaryPalette[salaryCount % salaryPalette.length]);
   }, [salary, salaryCount, visible]);
 
-  const dateObj = useMemo(() => {
-    const [y, m, d] = payDate.split('-').map(Number);
-    return new Date(y, (m || 1) - 1, d || 1);
-  }, [payDate]);
+  const dateObj = useMemo(() => parseISODate(payDate), [payDate]);
+  const secondDateObj = useMemo(() => parseISODate(secondPayDate), [secondPayDate]);
+
+  const applyFirstDate = (next: string) => {
+    setPayDate(next);
+    if (freq === 'biweekly' || freq === 'semimonthly') {
+      setSecondPayDate(defaultSecondPayDate(freq, next));
+    }
+  };
+
+  const applyFreq = (next: SalaryFrequency) => {
+    setFreq(next);
+    if (next === 'biweekly' || next === 'semimonthly') {
+      setSecondPayDate(defaultSecondPayDate(next, payDate));
+    }
+  };
 
   const onDateChange = (event: DateTimePickerEvent, selected?: Date) => {
     if (Platform.OS === 'android') setShowDate(false);
     if (event.type === 'dismissed') return;
-    if (selected) setPayDate(toISODate(selected));
+    if (selected) applyFirstDate(toISODate(selected));
+  };
+
+  const onSecondDateChange = (event: DateTimePickerEvent, selected?: Date) => {
+    if (Platform.OS === 'android') setShowSecondDate(false);
+    if (event.type === 'dismissed') return;
+    if (selected) setSecondPayDate(toISODate(selected));
   };
 
   const save = () => {
@@ -84,6 +115,7 @@ export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: P
       Alert.alert('Missing date', 'Please select the salary start/pay date.');
       return;
     }
+    const nextSecond = adjustedSecondPayDate(freq, payDate, secondPayDate);
     onSave({
       id: salary?.id,
       name: name.trim() || 'Untitled Salary',
@@ -91,7 +123,8 @@ export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: P
       freq,
       savings: Number(savings) || 0,
       payDate,
-      secondPayDay: freq === 'semimonthly' ? secondPayDay : undefined,
+      secondPayDate: nextSecond,
+      secondPayDay: nextSecond,
       color,
     });
     onClose();
@@ -137,12 +170,19 @@ export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: P
               />
               <Text style={styles.note}>{helperFor(freq)}</Text>
 
-              {freq === 'semimonthly' ? (
-                <SelectField
-                  label="Second salary date"
-                  value={secondPayDay === '31' ? '31st / last day' : '30th'}
-                  onPress={() => setShowSecond(true)}
-                />
+              {needsSecondDate ? (
+                <>
+                  <SelectField
+                    label="Second salary date"
+                    value={secondDateObj.toLocaleDateString('en-GB')}
+                    onPress={() => setShowSecondDate(true)}
+                  />
+                  <Text style={styles.note}>
+                    {freq === 'biweekly'
+                      ? 'On save, this date is set to 14 days after the first payday.'
+                      : 'On save, both days of the month will repeat going forward.'}
+                  </Text>
+                </>
               ) : null}
 
               <FieldLabel>Preferred savings per pay period</FieldLabel>
@@ -171,27 +211,14 @@ export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: P
         title="Frequency"
         options={FREQ_OPTIONS}
         selected={freq}
-        onSelect={setFreq}
+        onSelect={applyFreq}
         onClose={() => setShowFreq(false)}
       />
-      <OptionsModal
-        visible={showSecond}
-        title="Second salary date"
-        options={[
-          { value: '30', label: '30th' },
-          { value: '31', label: '31st / last day' },
-        ]}
-        selected={secondPayDay}
-        onSelect={setSecondPayDay}
-        onClose={() => setShowSecond(false)}
-      />
       {showDate ? (
-        <DateTimePicker
-          value={dateObj}
-          mode="date"
-          display="default"
-          onChange={onDateChange}
-        />
+        <DateTimePicker value={dateObj} mode="date" display="default" onChange={onDateChange} />
+      ) : null}
+      {showSecondDate ? (
+        <DateTimePicker value={secondDateObj} mode="date" display="default" onChange={onSecondDateChange} />
       ) : null}
     </Modal>
   );

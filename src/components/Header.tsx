@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { Image, Pressable, StyleSheet, Text, View, Alert } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { colors } from '../theme';
@@ -9,9 +8,7 @@ export function Header() {
   return (
     <View style={styles.wrap}>
       <View style={styles.brand}>
-        <LinearGradient colors={[colors.primary, colors.purple]} style={styles.logo}>
-          <Text style={styles.peso}>₱</Text>
-        </LinearGradient>
+        <Image source={require('../../assets/logo.png')} style={styles.logo} />
         <View>
           <Text style={styles.title}>MoneyWise</Text>
           <Text style={styles.sub}>Multi-income financial helper</Text>
@@ -74,13 +71,6 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  peso: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 22,
   },
   title: {
     fontSize: 22,
