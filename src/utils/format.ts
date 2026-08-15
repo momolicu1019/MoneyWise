@@ -37,6 +37,14 @@ export function addDays(date: Date, days: number): Date {
   return next;
 }
 
+export function addMonths(date: Date, months: number): Date {
+  const year = date.getFullYear();
+  const month = date.getMonth() + months;
+  const day = date.getDate();
+  const last = daysInMonth(year, month);
+  return new Date(year, month, Math.min(day, last));
+}
+
 export function defaultSecondPayDate(freq: SalaryFrequency, firstIso: string): string {
   const first = parseISODate(firstIso);
   if (freq === 'biweekly') return toISODate(addDays(first, 14));

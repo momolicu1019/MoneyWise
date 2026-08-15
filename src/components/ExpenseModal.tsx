@@ -47,6 +47,7 @@ export function ExpenseModal({
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(defaultDate);
   const [freq, setFreq] = useState<ExpenseFrequency>('once');
+  const [monthsToPay, setMonthsToPay] = useState('0');
   const [salaryId, setSalaryId] = useState(salaries[0]?.id || '');
   const [showFreq, setShowFreq] = useState(false);
   const [showSalary, setShowSalary] = useState(false);
@@ -58,6 +59,7 @@ export function ExpenseModal({
     setAmount(expense?.amount ? String(expense.amount) : '');
     setDate(expense?.date || defaultDate);
     setFreq(expense?.freq || 'once');
+    setMonthsToPay(String(expense?.monthsToPay ?? 0));
     setSalaryId(expense?.salaryId || salaries[0]?.id || '');
   }, [defaultDate, expense, salaries, visible]);
 
@@ -80,6 +82,11 @@ export function ExpenseModal({
       Alert.alert('Missing details', 'Please enter amount and due date.');
       return;
     }
+    const parsedMonths = monthsToPay.trim() === '' ? 0 : Number(monthsToPay);
+    if (!Number.isInteger(parsedMonths) || parsedMonths < 0) {
+      Alert.alert('Months to pay', 'Use 0 or a whole number of months.');
+      return;
+    }
     if (!salaryId) {
       Alert.alert('Missing salary', 'Please choose a salary for this expense.');
       return;
@@ -91,6 +98,7 @@ export function ExpenseModal({
       date,
       freq,
       salaryId,
+      monthsToPay: parsedMonths,
     });
     onClose();
   };
@@ -136,6 +144,20 @@ export function ExpenseModal({
                 value={expenseFreqLabel[freq]}
                 onPress={() => setShowFreq(true)}
               />
+
+              <FieldLabel>Months to pay</FieldLabel>
+              <TextInput
+                value={monthsToPay}
+                onChangeText={setMonthsToPay}
+                keyboardType="number-pad"
+                placeholder="0"
+                placeholderTextColor="#94a3b8"
+                style={styles.input}
+              />
+              <Text style={styles.hint}>
+                0 keeps repeating by frequency. 3 stops this expense after 3 months.
+              </Text>
+
               <SelectField
                 label="Salary"
                 value={selectedSalary?.name || 'Select salary'}
@@ -234,6 +256,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text,
     backgroundColor: '#fff',
+  },
+  hint: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 6,
+    lineHeight: 16,
   },
   actions: {
     flexDirection: 'row',

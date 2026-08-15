@@ -1,6 +1,6 @@
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import type { Salary } from '../types';
-import { money, salaryFreqLabel } from '../utils/format';
+import { salaryFreqLabel } from '../utils/format';
 import { DangerButton, SoftButton } from './Buttons';
 import { colors } from '../theme';
 
@@ -18,16 +18,6 @@ export function SalaryCard({ salary, onEdit, onDelete }: Props) {
         <View style={{ flex: 1 }}>
           <Text style={styles.name}>{salary.name}</Text>
           <Text style={styles.freq}>{salaryFreqLabel[salary.freq]}</Text>
-        </View>
-      </View>
-      <View style={styles.values}>
-        <View style={styles.mini}>
-          <Text style={styles.miniLabel}>Pay period</Text>
-          <Text style={styles.miniValue}>{money(salary.amount)}</Text>
-        </View>
-        <View style={styles.mini}>
-          <Text style={styles.miniLabel}>Savings / pay</Text>
-          <Text style={[styles.miniValue, { color: colors.green }]}>{money(salary.savings)}</Text>
         </View>
       </View>
       <View style={styles.actions}>
@@ -78,30 +68,9 @@ const styles = StyleSheet.create({
     color: colors.muted,
     marginTop: 1,
   },
-  values: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  mini: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
-    padding: 9,
-  },
-  miniLabel: {
-    color: colors.muted,
-    fontSize: 10,
-  },
-  miniValue: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: colors.text,
-    marginTop: 2,
-  },
   actions: {
     flexDirection: 'row',
     gap: 6,
-    marginTop: 10,
+    marginTop: 12,
   },
 });

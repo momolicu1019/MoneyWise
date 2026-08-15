@@ -1,5 +1,5 @@
 import type { Expense, Salary } from '../types';
-import { addDays, daysInMonth, parseISODate, toISODate } from './format';
+import { addDays, addMonths, daysInMonth, parseISODate, toISODate } from './format';
 
 const MS_PER_DAY = 86400000;
 
@@ -8,6 +8,10 @@ export function expenseOccursOn(expense: Expense, year: number, month: number, d
   const target = new Date(year, month, day);
   const diff = Math.round((target.getTime() - base.getTime()) / MS_PER_DAY);
   if (diff < 0) return false;
+
+  const monthsToPay = expense.monthsToPay || 0;
+  if (monthsToPay > 0 && target >= addMonths(base, monthsToPay)) return false;
+
   if (expense.freq === 'once') return diff === 0;
   if (expense.freq === 'daily') return true;
   if (expense.freq === 'monthly') return base.getDate() === day;

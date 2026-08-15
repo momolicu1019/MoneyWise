@@ -21,6 +21,7 @@ export type Expense = {
   date: string;
   freq: ExpenseFrequency;
   salaryId: string;
+  monthsToPay?: number;
 };
 
 export type GoogleUser = {
