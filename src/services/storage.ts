@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CloudPayload, Expense, Salary } from '../types';
 
 const DATA_KEY = 'moneywise.payload.v1';
+const LAST_CLOUD_SYNC_KEY = 'moneywise.lastCloudSync.v1';
 
 export async function loadLocalPayload(): Promise<CloudPayload | null> {
   const raw = await AsyncStorage.getItem(DATA_KEY);
@@ -24,4 +25,16 @@ export function makePayload(salaries: Salary[], expenses: Expense[], updatedAt?:
     salaries,
     expenses,
   };
+}
+
+export async function loadLastCloudSync(): Promise<string | null> {
+  return AsyncStorage.getItem(LAST_CLOUD_SYNC_KEY);
+}
+
+export async function saveLastCloudSync(iso: string): Promise<void> {
+  await AsyncStorage.setItem(LAST_CLOUD_SYNC_KEY, iso);
+}
+
+export async function clearLastCloudSync(): Promise<void> {
+  await AsyncStorage.removeItem(LAST_CLOUD_SYNC_KEY);
 }

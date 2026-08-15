@@ -37,3 +37,5 @@ export type CloudPayload = {
 };
 
 export type SalaryFilterId = 'all' | string;
+
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';

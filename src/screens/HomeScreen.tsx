@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useApp } from '../context/AppContext';
@@ -40,6 +40,7 @@ export function HomeScreen() {
     removeSalary,
     upsertExpense,
     removeExpense,
+    syncNow,
   } = useApp();
 
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
@@ -50,6 +51,7 @@ export function HomeScreen() {
   const [rangeStart, setRangeStart] = useState(() => monthRange(viewDate).start);
   const [rangeEnd, setRangeEnd] = useState(() => monthRange(viewDate).end);
   const [picking, setPicking] = useState<'start' | 'end' | null>(null);
+  const [pullRefreshing, setPullRefreshing] = useState(false);
 
   useEffect(() => {
     const next = monthRange(viewDate);
@@ -83,6 +85,15 @@ export function HomeScreen() {
     setExpenseModalOpen(true);
   };
 
+  const onPullRefresh = async () => {
+    setPullRefreshing(true);
+    try {
+      await syncNow();
+    } finally {
+      setPullRefreshing(false);
+    }
+  };
+
   const onRangeDate = (which: 'start' | 'end') => (event: DateTimePickerEvent, selected?: Date) => {
     if (Platform.OS === 'android') setPicking(null);
     if (event.type === 'dismissed' || !selected) return;
@@ -98,7 +109,17 @@ export function HomeScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: Constants.statusBarHeight + 8 }]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={pullRefreshing}
+            onRefresh={() => void onPullRefresh()}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
         <Header />
 
         <Card

@@ -17,8 +17,7 @@ export function getGoogleClientIds() {
 }
 
 export function isGoogleConfigured(): boolean {
-  const { webClientId, androidClientId } = getGoogleClientIds();
-  return Boolean(webClientId || androidClientId);
+  return Boolean(getGoogleClientIds().webClientId);
 }
 
 export function configureGoogleSignIn(): void {
@@ -68,6 +67,21 @@ function toAppUser(name: string | null, email: string, photo: string | null): Go
   };
 }
 
+async function requestDriveScope(): Promise<void> {
+  try {
+    await GoogleSignin.addScopes({ scopes: GOOGLE_SCOPES });
+  } catch (error) {
+    if (isGoogleCancelError(error)) {
+      throw new Error('Drive access is required to sync between phones. Sign in again and allow it.');
+    }
+  }
+}
+
+async function cacheAccessToken(accessToken: string): Promise<void> {
+  await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
+  await SecureStore.setItemAsync(EXPIRES_AT_KEY, String(Date.now() + 3500 * 1000));
+}
+
 export async function signInWithGoogleNative(): Promise<GoogleUser> {
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   const response = await GoogleSignin.signIn();
@@ -77,7 +91,12 @@ export async function signInWithGoogleNative(): Promise<GoogleUser> {
     throw error;
   }
 
+  await requestDriveScope();
   const tokens = await GoogleSignin.getTokens();
+  if (!tokens.accessToken) {
+    throw new Error('Google did not return an access token. Rebuild the app with EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID set.');
+  }
+
   const user = toAppUser(
     response.data.user.name,
     response.data.user.email,
@@ -96,25 +115,44 @@ export async function signOutFromGoogle(): Promise<void> {
   await clearAuthSession();
 }
 
-export async function getValidAccessToken(): Promise<string | null> {
+export async function getValidAccessToken(forceDriveScope = false): Promise<string | null> {
   try {
-    if (GoogleSignin.hasPreviousSignIn()) {
-      const tokens = await GoogleSignin.getTokens();
-      if (tokens.accessToken) {
-        await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, tokens.accessToken);
-        await SecureStore.setItemAsync(EXPIRES_AT_KEY, String(Date.now() + 3500 * 1000));
-        return tokens.accessToken;
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: false });
+    if (!GoogleSignin.hasPreviousSignIn()) {
+      return getCachedTokenIfFresh();
+    }
+
+    try {
+      const silent = await GoogleSignin.signInSilently();
+      if (silent.type !== 'success') {
+        return getCachedTokenIfFresh();
       }
+    } catch {
+      // Continue with the existing native session if silent sign-in is unavailable.
+    }
+
+    if (forceDriveScope) {
+      await requestDriveScope();
+    }
+
+    const tokens = await GoogleSignin.getTokens();
+    if (tokens.accessToken) {
+      await cacheAccessToken(tokens.accessToken);
+      return tokens.accessToken;
     }
   } catch {
     // Fall through to the stored token.
   }
 
+  return getCachedTokenIfFresh();
+}
+
+async function getCachedTokenIfFresh(): Promise<string | null> {
   const token = await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
   const expiresAtRaw = await SecureStore.getItemAsync(EXPIRES_AT_KEY);
   const expiresAt = expiresAtRaw ? Number(expiresAtRaw) : 0;
   if (token && Date.now() < expiresAt - 30_000) return token;
-  return token;
+  return null;
 }
 
 export function isGoogleCancelError(error: unknown): boolean {

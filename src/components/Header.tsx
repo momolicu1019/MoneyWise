@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useApp } from '../context/AppContext';
-import { DangerButton, SoftButton } from './Buttons';
+import { DangerButton, PrimaryButton, SoftButton } from './Buttons';
+import { SyncStatusIcon } from './SyncStatusIcon';
 import { colors } from '../theme';
 
 function formatLastSync(iso: string | null, isSyncing: boolean): string {
@@ -11,7 +12,7 @@ function formatLastSync(iso: string | null, isSyncing: boolean): string {
 }
 
 export function Header() {
-  const { user, signInWithGoogle, signOut, isSyncing, lastSyncedAt } = useApp();
+  const { user, signInWithGoogle, signOut, isSyncing, syncStatus, lastSyncedAt, syncError, syncNow } = useApp();
   const [profileOpen, setProfileOpen] = useState(false);
 
   return (
@@ -25,15 +26,25 @@ export function Header() {
       </View>
 
       {user ? (
-        <Pressable style={styles.avatarWrap} onPress={() => setProfileOpen(true)}>
-          {user.picture ? (
-            <Image source={{ uri: user.picture }} style={styles.avatarImg} />
-          ) : (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{user.name.trim().charAt(0).toUpperCase()}</Text>
-            </View>
-          )}
-        </Pressable>
+        <View style={styles.profileCluster}>
+          <Pressable
+            onPress={() => void syncNow()}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Sync status"
+          >
+            <SyncStatusIcon status={syncStatus} />
+          </Pressable>
+          <Pressable style={styles.avatarWrap} onPress={() => setProfileOpen(true)}>
+            {user.picture ? (
+              <Image source={{ uri: user.picture }} style={styles.avatarImg} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{user.name.trim().charAt(0).toUpperCase()}</Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
       ) : (
         <Pressable style={styles.googleBtn} onPress={() => void signInWithGoogle()}>
           <View style={styles.gMark}>
@@ -60,8 +71,19 @@ export function Header() {
               </View>
             </View>
             <View style={styles.metaBox}>
-              <Text style={styles.metaLabel}>Last sync</Text>
+              <Text style={styles.metaLabel}>Last Drive sync</Text>
               <Text style={styles.metaValue}>{formatLastSync(lastSyncedAt, isSyncing)}</Text>
+              {syncError ? <Text style={styles.metaError}>{syncError}</Text> : null}
+              <Text style={styles.metaHint}>
+                Syncs to Google Drive after you edit, and downloads when you open the app or tap Sync now.
+              </Text>
+            </View>
+            <View style={styles.syncBtn}>
+              <PrimaryButton
+                title={isSyncing ? 'Syncing…' : 'Sync now'}
+                onPress={() => void syncNow()}
+                disabled={isSyncing}
+              />
             </View>
             <View style={styles.sheetActions}>
               <SoftButton title="Close" onPress={() => setProfileOpen(false)} />
@@ -147,6 +169,12 @@ const styles = StyleSheet.create({
   avatarWrap: {
     flexShrink: 0,
   },
+  profileCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
   avatar: {
     width: 40,
     height: 40,
@@ -204,7 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   metaLabel: {
     fontSize: 11,
@@ -216,6 +244,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.text,
     fontWeight: '600',
+  },
+  metaError: {
+    fontSize: 12,
+    color: colors.red,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  metaHint: {
+    fontSize: 11,
+    color: colors.muted,
+    marginTop: 8,
+    lineHeight: 16,
+  },
+  syncBtn: {
+    marginBottom: 12,
   },
   sheetActions: {
     flexDirection: 'row',

@@ -8,8 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Alert } from 'react-native';
-import type { Expense, GoogleUser, Salary, SalaryFilterId } from '../types';
+import { Alert, AppState, type AppStateStatus } from 'react-native';
+import type { Expense, GoogleUser, Salary, SalaryFilterId, SyncStatus } from '../types';
 import {
   configureGoogleSignIn,
   getValidAccessToken,
@@ -19,14 +19,23 @@ import {
   signInWithGoogleNative,
   signOutFromGoogle,
 } from '../services/googleAuth';
-import { pullFromDrive, pushToDrive } from '../services/googleDrive';
-import { loadLocalPayload, makePayload, saveLocalPayload } from '../services/storage';
+import { formatSyncError, pullFromDrive, pushToDrive } from '../services/googleDrive';
+import {
+  clearLastCloudSync,
+  loadLastCloudSync,
+  loadLocalPayload,
+  makePayload,
+  saveLastCloudSync,
+  saveLocalPayload,
+} from '../services/storage';
 
 type AppContextValue = {
   ready: boolean;
   user: GoogleUser | null;
   isSyncing: boolean;
+  syncStatus: SyncStatus;
   lastSyncedAt: string | null;
+  syncError: string | null;
   salaries: Salary[];
   expenses: Expense[];
   selectedSalaryId: SalaryFilterId;
@@ -39,6 +48,7 @@ type AppContextValue = {
   removeExpense: (id: string) => void;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  syncNow: () => Promise<void>;
   googleConfigured: boolean;
 };
 
@@ -48,59 +58,137 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<GoogleUser | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [selectedSalaryId, setSelectedSalaryId] = useState<SalaryFilterId>('all');
   const [viewDate, setViewDate] = useState(() => new Date());
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userRef = useRef<GoogleUser | null>(null);
+  const salariesRef = useRef<Salary[]>([]);
+  const expensesRef = useRef<Expense[]>([]);
+  const didAlertSyncError = useRef(false);
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const syncGen = useRef(0);
   const googleConfigured = isGoogleConfigured();
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+  useEffect(() => {
+    salariesRef.current = salaries;
+  }, [salaries]);
+  useEffect(() => {
+    expensesRef.current = expenses;
+  }, [expenses]);
+
+  const beginSync = useCallback(() => {
+    syncGen.current += 1;
+    setIsSyncing(true);
+    setSyncStatus('syncing');
+  }, []);
+
+  const markCloudSynced = useCallback(async (iso: string) => {
+    setLastSyncedAt(iso);
+    setSyncError(null);
+    setSyncStatus('success');
+    didAlertSyncError.current = false;
+    await saveLastCloudSync(iso);
+  }, []);
+
+  const reportSyncError = useCallback((error: unknown, alertAlways = false) => {
+    const message = formatSyncError(error);
+    setSyncError(message);
+    setSyncStatus('error');
+    if (alertAlways || !didAlertSyncError.current) {
+      didAlertSyncError.current = true;
+      Alert.alert('Drive sync failed', message);
+    }
+  }, []);
+
+  const withDriveToken = useCallback(async <T,>(fn: (token: string) => Promise<T>): Promise<T> => {
+    let token = await getValidAccessToken();
+    if (!token) {
+      throw new Error('Could not get a Google Drive token. Log out and sign in again, then allow Drive access.');
+    }
+    try {
+      return await fn(token);
+    } catch (error) {
+      const message = formatSyncError(error);
+      if (!/Drive permission/i.test(message)) throw error;
+      token = await getValidAccessToken(true);
+      if (!token) throw error;
+      return fn(token);
+    }
+  }, []);
+
+  const pushLatestToDrive = useCallback(async () => {
+    if (!userRef.current) return;
+    const gen = syncGen.current;
+    const latest = await loadLocalPayload();
+    if (!latest) {
+      if (syncGen.current === gen) setIsSyncing(false);
+      return;
+    }
+    try {
+      await withDriveToken((token) => pushToDrive(token, latest));
+      if (syncGen.current === gen) await markCloudSynced(latest.updatedAt);
+    } catch (error) {
+      if (syncGen.current === gen) reportSyncError(error);
+    } finally {
+      if (syncGen.current === gen) setIsSyncing(false);
+    }
+  }, [markCloudSynced, reportSyncError, withDriveToken]);
 
   const persistAndSync = useCallback(
     (nextSalaries: Salary[], nextExpenses: Expense[]) => {
+      salariesRef.current = nextSalaries;
+      expensesRef.current = nextExpenses;
       const payload = makePayload(nextSalaries, nextExpenses);
       void saveLocalPayload(payload);
+      if (!userRef.current) return;
+      beginSync();
       if (syncTimer.current) clearTimeout(syncTimer.current);
       syncTimer.current = setTimeout(() => {
-        void (async () => {
-          const token = await getValidAccessToken();
-          if (!token) return;
-          try {
-            setIsSyncing(true);
-            await pushToDrive(token, payload);
-            setLastSyncedAt(payload.updatedAt);
-          } catch (error) {
-            console.warn('Drive sync failed', error);
-          } finally {
-            setIsSyncing(false);
-          }
-        })();
+        void pushLatestToDrive();
       }, 800);
     },
-    [],
+    [beginSync, pushLatestToDrive],
   );
 
-  const hydrateFromCloud = useCallback(async () => {
-    const token = await getValidAccessToken();
-    if (!token) return;
-    try {
-      setIsSyncing(true);
-      const cloud = await pullFromDrive(token);
-      if (cloud) {
-        setSalaries(cloud.salaries || []);
-        setExpenses(cloud.expenses || []);
-        setLastSyncedAt(cloud.updatedAt);
-        await saveLocalPayload(cloud);
-      } else {
-        const local = await loadLocalPayload();
-        if (local) await pushToDrive(token, local);
+  const reconcileWithDrive = useCallback(
+    async (alertAlways = false) => {
+      if (!userRef.current) return;
+      beginSync();
+      const gen = syncGen.current;
+      try {
+        await withDriveToken(async (token) => {
+          const cloud = await pullFromDrive(token);
+          const local = await loadLocalPayload();
+          if (cloud && (!local || cloud.updatedAt >= local.updatedAt)) {
+            setSalaries(cloud.salaries || []);
+            setExpenses(cloud.expenses || []);
+            await saveLocalPayload(cloud);
+            await markCloudSynced(cloud.updatedAt);
+            return;
+          }
+          if (local) {
+            await pushToDrive(token, local);
+            await markCloudSynced(local.updatedAt);
+            return;
+          }
+          await markCloudSynced(new Date().toISOString());
+        });
+      } catch (error) {
+        if (syncGen.current === gen) reportSyncError(error, alertAlways);
+      } finally {
+        if (syncGen.current === gen) setIsSyncing(false);
       }
-    } catch (error) {
-      console.warn('Drive restore failed', error);
-    } finally {
-      setIsSyncing(false);
-    }
-  }, []);
+    },
+    [beginSync, markCloudSynced, reportSyncError, withDriveToken],
+  );
 
   useEffect(() => {
     configureGoogleSignIn();
@@ -109,39 +197,71 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (local) {
         setSalaries(local.salaries || []);
         setExpenses(local.expenses || []);
-        setLastSyncedAt(local.updatedAt);
+      }
+      const cloudSync = await loadLastCloudSync();
+      if (cloudSync) {
+        setLastSyncedAt(cloudSync);
+        setSyncStatus('success');
       }
       const storedUser = await loadStoredUser();
       if (storedUser) {
+        userRef.current = storedUser;
         setUser(storedUser);
-        await hydrateFromCloud();
+        await reconcileWithDrive();
       }
       setReady(true);
     })();
-  }, [hydrateFromCloud]);
+  }, [reconcileWithDrive]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      const previous = appState.current;
+      appState.current = next;
+      if (previous.match(/inactive|background/) && next === 'active') {
+        void reconcileWithDrive();
+      }
+    });
+    return () => sub.remove();
+  }, [reconcileWithDrive]);
 
   const signInWithGoogle = useCallback(async () => {
     if (!googleConfigured) {
       Alert.alert(
         'Google not configured',
-        'Add your Google OAuth Web and Android client IDs, then create a new EAS build.',
+        'Add EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (OAuth Web client ID), then create a new EAS build.',
       );
       return;
     }
     try {
       const profile = await signInWithGoogleNative();
+      userRef.current = profile;
       setUser(profile);
-      await hydrateFromCloud();
+      await reconcileWithDrive(true);
     } catch (error) {
       if (isGoogleCancelError(error)) return;
       Alert.alert('Google sign-in failed', error instanceof Error ? error.message : 'Unknown error');
     }
-  }, [googleConfigured, hydrateFromCloud]);
+  }, [googleConfigured, reconcileWithDrive]);
 
   const signOut = useCallback(async () => {
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    userRef.current = null;
     await signOutFromGoogle();
+    await clearLastCloudSync();
     setUser(null);
+    setLastSyncedAt(null);
+    setSyncError(null);
+    setIsSyncing(false);
+    setSyncStatus('idle');
   }, []);
+
+  const syncNow = useCallback(async () => {
+    if (!userRef.current) {
+      Alert.alert('Not signed in', 'Sign in with Google first to sync between phones.');
+      return;
+    }
+    await reconcileWithDrive(true);
+  }, [reconcileWithDrive]);
 
   const upsertSalary = useCallback(
     (salary: Omit<Salary, 'id'> & { id?: string }) => {
@@ -199,7 +319,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ready,
       user,
       isSyncing,
+      syncStatus,
       lastSyncedAt,
+      syncError,
       salaries,
       expenses,
       selectedSalaryId,
@@ -212,6 +334,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       removeExpense,
       signInWithGoogle,
       signOut,
+      syncNow,
       googleConfigured,
     }),
     [
@@ -220,6 +343,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       googleConfigured,
       isSyncing,
       lastSyncedAt,
+      syncStatus,
       ready,
       removeExpense,
       removeSalary,
@@ -227,6 +351,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectedSalaryId,
       signInWithGoogle,
       signOut,
+      syncError,
+      syncNow,
       upsertExpense,
       upsertSalary,
       user,
