@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useApp } from '../context/AppContext';
+import { formatDisplayDateTime } from '../utils/format';
 import { DangerButton, PrimaryButton, SoftButton } from './Buttons';
 import { SyncStatusIcon } from './SyncStatusIcon';
 import { colors } from '../theme';
@@ -8,7 +9,7 @@ import { colors } from '../theme';
 function formatLastSync(iso: string | null, isSyncing: boolean): string {
   if (isSyncing) return 'Syncing now…';
   if (!iso) return 'Not synced yet';
-  return new Date(iso).toLocaleString();
+  return formatDisplayDateTime(iso);
 }
 
 export function Header() {

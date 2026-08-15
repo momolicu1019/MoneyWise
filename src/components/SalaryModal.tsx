@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import type { Salary, SalaryFrequency } from '../types';
-import { defaultSecondPayDate, parseISODate, salaryFreqLabel, toISODate } from '../utils/format';
+import { defaultSecondPayDate, formatDisplayDate, parseISODate, salaryFreqLabel, toISODate } from '../utils/format';
 import { adjustedSecondPayDate } from '../utils/recurrence';
 import { colors, salaryPalette } from '../theme';
 import { ColorPicker } from './ColorPicker';
@@ -165,7 +165,7 @@ export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: P
 
               <SelectField
                 label="First salary date"
-                value={dateObj.toLocaleDateString('en-GB')}
+                value={formatDisplayDate(payDate)}
                 onPress={() => setShowDate(true)}
               />
               <Text style={styles.note}>{helperFor(freq)}</Text>
@@ -174,7 +174,7 @@ export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: P
                 <>
                   <SelectField
                     label="Second salary date"
-                    value={secondDateObj.toLocaleDateString('en-GB')}
+                    value={formatDisplayDate(secondPayDate)}
                     onPress={() => setShowSecondDate(true)}
                   />
                   <Text style={styles.note}>

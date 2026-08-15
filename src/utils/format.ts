@@ -18,9 +18,18 @@ export function toISODate(date: Date): string {
 
 export function formatDisplayDate(iso: string): string {
   const date = parseISODate(iso);
-  const d = String(date.getDate()).padStart(2, '0');
   const m = String(date.getMonth() + 1).padStart(2, '0');
-  return `${d}/${m}/${date.getFullYear()}`;
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${m}/${d}/${date.getFullYear()}`;
+}
+
+export function formatDisplayDateTime(iso: string): string {
+  const date = new Date(iso);
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const y = date.getFullYear();
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${m}/${d}/${y}, ${time}`;
 }
 
 export function monthTitle(date: Date): string {

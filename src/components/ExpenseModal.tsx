@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import type { Expense, ExpenseFrequency, Salary } from '../types';
-import { expenseFreqLabel, toISODate } from '../utils/format';
+import { expenseFreqLabel, formatDisplayDate, toISODate } from '../utils/format';
 import { OptionsModal } from './OptionsModal';
 import { FieldLabel, SelectField } from './SelectField';
 import { DangerButton, PrimaryButton, SoftButton } from './Buttons';
@@ -136,7 +136,7 @@ export function ExpenseModal({
 
               <SelectField
                 label="Due date"
-                value={dateObj.toLocaleDateString('en-GB')}
+                value={formatDisplayDate(date)}
                 onPress={() => setShowDate(true)}
               />
               <SelectField
