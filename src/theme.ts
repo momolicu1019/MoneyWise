@@ -1,0 +1,45 @@
+export const colors = {
+  bg: '#f5f7fb',
+  card: '#ffffff',
+  text: '#172033',
+  muted: '#718096',
+  border: '#e5e9f2',
+  primary: '#4f46e5',
+  primaryDark: '#4338ca',
+  purple: '#7c3aed',
+  green: '#16a34a',
+  orange: '#f59e0b',
+  red: '#dc2626',
+  soft: '#eef2ff',
+  overlay: 'rgba(15, 23, 42, 0.40)',
+  today: '#f5f3ff',
+  emptyDay: '#fafbfc',
+  chartBg: '#f8fafc',
+};
+
+export const salaryPalette = [
+  '#4f46e5',
+  '#7c3aed',
+  '#16a34a',
+  '#f59e0b',
+  '#ec4899',
+  '#0891b2',
+  '#dc2626',
+  '#0f766e',
+  '#9333ea',
+  '#ea580c',
+  '#2563eb',
+  '#ca8a04',
+  '#db2777',
+  '#059669',
+  '#0284c7',
+  '#1e293b',
+];
+
+export const spacing = {
+  xs: 6,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 22,
+};

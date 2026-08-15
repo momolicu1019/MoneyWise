@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "MoneyWise",
+    "slug": "moneywise",
+    "scheme": "moneywise",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#4f46e5"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.moneywise.app"
+    },
+    "android": {
+      "package": "com.moneywise.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#4f46e5",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-web-browser",
+      "expo-secure-store",
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}
