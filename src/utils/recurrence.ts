@@ -55,7 +55,7 @@ export function resolveSecondPayDate(salary: Salary): Date | null {
   return new Date(first.getFullYear(), first.getMonth(), dayNum);
 }
 
-export function salaryPaysOnDay(salary: Salary, year: number, month: number, day: number): boolean {
+export function salaryScheduledOnDay(salary: Salary, year: number, month: number, day: number): boolean {
   const date = new Date(year, month, day);
   const start = parseISODate(salary.payDate || toISODate(new Date(year, month, 1)));
   if (date < start) return false;
@@ -78,6 +78,24 @@ export function salaryPaysOnDay(salary: Salary, year: number, month: number, day
     const second = resolveSecondPayDate(salary);
     const secondDay = Math.min(second ? second.getDate() : startDay + 15, lastDay);
     return day === firstDay || day === secondDay;
+  }
+  return false;
+}
+
+export function salaryPaysOnDay(salary: Salary, year: number, month: number, day: number): boolean {
+  const date = new Date(year, month, day);
+  const weekday = date.getDay();
+  if (weekday === 0 || weekday === 6) return false;
+
+  if (salaryScheduledOnDay(salary, year, month, day)) return true;
+
+  if (weekday === 5) {
+    const saturday = addDays(date, 1);
+    const sunday = addDays(date, 2);
+    return (
+      salaryScheduledOnDay(salary, saturday.getFullYear(), saturday.getMonth(), saturday.getDate()) ||
+      salaryScheduledOnDay(salary, sunday.getFullYear(), sunday.getMonth(), sunday.getDate())
+    );
   }
   return false;
 }

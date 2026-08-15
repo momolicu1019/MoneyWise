@@ -164,7 +164,7 @@ export function ExpenseCalendar({
         ))}
       </View>
       <Text style={styles.note}>
-        Payday dates are marked in the salary color. Tap an expense to edit or delete it.
+        Payday dates are marked in the salary color. Weekend paydays are shown on Friday.
       </Text>
 
       <Modal visible={overflowDay !== null} transparent animationType="fade" onRequestClose={() => setOverflowDay(null)}>
