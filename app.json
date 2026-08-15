@@ -2,6 +2,7 @@
   "expo": {
     "name": "MoneyWise",
     "slug": "moneywise",
+    "owner": "jeff1019-team",
     "scheme": "moneywise",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -34,6 +35,11 @@
       "expo-web-browser",
       "expo-secure-store",
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "64223b50-135c-49b7-9913-2d100c62594f"
+      }
+    }
   }
 }
