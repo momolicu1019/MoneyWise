@@ -1,5 +1,5 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -52,9 +52,17 @@ export function ExpenseModal({
   const [showFreq, setShowFreq] = useState(false);
   const [showSalary, setShowSalary] = useState(false);
   const [showDate, setShowDate] = useState(false);
+  const wasVisible = useRef(false);
 
+  // Only seed fields when the modal opens. Background sync can refresh
+  // salaries/expenses while the form is open; those must not wipe drafts.
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      wasVisible.current = false;
+      return;
+    }
+    if (wasVisible.current) return;
+    wasVisible.current = true;
     setName(expense?.name || '');
     setAmount(expense?.amount ? String(expense.amount) : '');
     setDate(expense?.date || defaultDate);

@@ -168,8 +168,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const cloud = await pullFromDrive(token);
           const local = await loadLocalPayload();
           if (cloud && (!local || cloud.updatedAt >= local.updatedAt)) {
-            setSalaries(cloud.salaries || []);
-            setExpenses(cloud.expenses || []);
+            const nextSalaries = cloud.salaries || [];
+            const nextExpenses = cloud.expenses || [];
+            // Avoid replacing state with identical payloads so open form drafts stay intact.
+            setSalaries((current) =>
+              JSON.stringify(current) === JSON.stringify(nextSalaries) ? current : nextSalaries,
+            );
+            setExpenses((current) =>
+              JSON.stringify(current) === JSON.stringify(nextExpenses) ? current : nextExpenses,
+            );
             await saveLocalPayload(cloud);
             await markCloudSynced(cloud.updatedAt);
             return;

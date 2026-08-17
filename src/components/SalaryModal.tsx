@@ -1,5 +1,5 @@
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -59,11 +59,19 @@ export function SalaryModal({ visible, salary, salaryCount, onClose, onSave }: P
   const [showFreq, setShowFreq] = useState(false);
   const [showDate, setShowDate] = useState(false);
   const [showSecondDate, setShowSecondDate] = useState(false);
+  const wasVisible = useRef(false);
 
   const needsSecondDate = freq === 'biweekly' || freq === 'semimonthly';
 
+  // Only seed fields when the modal opens so background sync refreshes
+  // do not wipe an in-progress draft.
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      wasVisible.current = false;
+      return;
+    }
+    if (wasVisible.current) return;
+    wasVisible.current = true;
     const first =
       salary?.payDate || toISODate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
     const nextFreq = salary?.freq || 'monthly';
