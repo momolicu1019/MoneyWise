@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { formatDisplayDateTime } from '../utils/format';
+import { AboutModal } from './AboutModal';
 import { DangerButton, PrimaryButton, SoftButton } from './Buttons';
 import { SyncStatusIcon } from './SyncStatusIcon';
 import { colors } from '../theme';
@@ -15,11 +16,19 @@ function formatLastSync(iso: string | null, isSyncing: boolean): string {
 export function Header() {
   const { user, signInWithGoogle, signOut, isSyncing, syncStatus, lastSyncedAt, syncError, syncNow } = useApp();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   return (
     <View style={styles.wrap}>
       <View style={styles.brand}>
-        <Image source={require('../../assets/logo.png')} style={styles.logo} />
+        <Pressable
+          onPress={() => setAboutOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="About MoneyWise"
+          hitSlop={6}
+        >
+          <Image source={require('../../assets/logo.png')} style={styles.logo} />
+        </Pressable>
         <View style={styles.brandText}>
           <Text style={styles.title}>MoneyWise</Text>
           <Text style={styles.sub}>Multi-income financial helper</Text>
@@ -99,6 +108,8 @@ export function Header() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />
     </View>
   );
 }
