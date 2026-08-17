@@ -52,6 +52,7 @@ export function HomeScreen() {
   const [rangeEnd, setRangeEnd] = useState(() => monthRange(viewDate).end);
   const [picking, setPicking] = useState<'start' | 'end' | null>(null);
   const [pullRefreshing, setPullRefreshing] = useState(false);
+  const [defaultExpenseDate] = useState(() => toISODate(new Date()));
 
   useEffect(() => {
     const next = monthRange(viewDate);
@@ -206,7 +207,7 @@ export function HomeScreen() {
         visible={expenseModalOpen}
         expense={editingExpense}
         salaries={salaries}
-        defaultDate={toISODate(new Date())}
+        defaultDate={defaultExpenseDate}
         onClose={() => setExpenseModalOpen(false)}
         onSave={upsertExpense}
         onDelete={
